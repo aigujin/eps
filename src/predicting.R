@@ -1,4 +1,4 @@
-
+## this is predicting script
 
 
 core.dt <- complete.dt[,true:=rank][,.(q.id,Stock,Broker,true)]
