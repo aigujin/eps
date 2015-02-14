@@ -1,0 +1,804 @@
+% \documentclass{article}
+% \usepackage{authblk}
+% \usepackage{amsmath, amssymb}
+% \usepackage{caption}
+% \captionsetup[table]{textfont={large},labelfont={normalsize},labelsep=newline,justification=justified,singlelinecheck=true, skip=0pt}
+% \captionsetup[figure]{textfont={large},labelfont={normalsize},labelsep=newline,justification=justified,singlelinecheck=true, skip=0pt}
+% %\usepackage{fullpage}
+% \usepackage{rotating}
+% \usepackage{xcolor}
+% \usepackage[colorlinks=true,urlcolor=blue,citecolor=black]{hyperref}
+% \usepackage{times}
+% \usepackage{setspace}
+% \usepackage{graphicx}
+% \usepackage{array}
+% \usepackage{tabularx}
+% \usepackage{booktabs}
+% \usepackage{multirow}
+% %\onehalfspacing
+% \doublespace
+% %\geometry{a4paper}
+% %\usepackage[natbibapa]{apacite}
+% \usepackage[longnamesfirst]{natbib}
+% 
+% \DeclareMathOperator{\argmax}{arg\,max}
+% %\newcommand{\theHalgorithm}{\arabic{algorithm}}
+% \DeclareMathOperator{\rank}{rank}
+% \newcommand{\theHalgorithm}{\arabic{algorithm}}
+% \newcommand{\tr}{\textit{true}}
+% \newcommand{\naive}{\textit{recent}}
+% \newcommand{\default}{\textit{all-time}}
+% \newcommand{\raw}{\texttt{raw}}
+% \newcommand{\diff}{\texttt{1diff}}
+% \newcommand{\random}{\texttt{random}}
+% \newcommand{\rollsd}{\texttt{roll.sd}}
+% %\newcommand{\default}{\texttt{default}}
+% 
+% \newcommand{\ra}[1]{\renewcommand{\arraystretch}{#1}}
+% \newcolumntype{Y}{>{\raggedleft\arraybackslash}X}
+% 
+% \begin{document}
+<<include=FALSE>>=
+library(knitr)
+opts_chunk$set(concordance=TRUE)
+@
+
+
+<<chp3-load-data,echo=F,warning=FALSE,message=FALSE>>=
+strategies <- c('true','recent','all-time')
+setwd('~/Dropbox/workspace/Projects/Black-Litterman/BL-strategies')
+library(reshape2)
+library(data.table)
+library(ggplot2)
+library(stringr)
+library(zoo)
+library(xtable)
+#load('cache/q.data.RData')
+#load('cache/final.bl.RData')
+#load('cache/market.set.RData')
+#load('cache/example.dt.RData')
+load('cache/array.all.vvs.RData')
+load('cache/broker.vvs.RData')
+source('lib/BL-functions.R')
+
+#library(ProjectTemplate)
+#load.project()
+###ADD NAs for the case of no ranking ( if NA, no raking)
+# split.rank <- function(r,n){
+# if(max(r,na.rm=T)==3|max(r,na.rm=T)==4){n=1}else{if(max(r,na.rm=T)==5|max(r,na.rm=T)==6){n=2}else{if(max(r,na.rm=T)==7|max(r,na.rm=T)==8){n=3}}}#else{if(max(r,na.rm=T)==9|max(r,na.rm=T)==10){n=4}}}}        
+#         t <- head(r,n)
+#         b <- tail(r,n)
+#         replace(replace(replace(replace(r,t,'top'),b,'bottom'),setdiff(r,c(t,b)),'middle'),which(is.na(r)),'noRank')
+# }
+# 
+# summary.stat <- function(dt){
+#   rbind(setnames(cbind(dt[,.N,by=list(year,Stock)][,.N,by=year],dt[,.N,by=list(year,Broker)][,.N,by=year][,N],dt[,.N,by=year][,N]),c('Years','Firms','Brokers','Observations')),data.table(cbind(Years='All years','Firms'=dt[,.N,by=Stock][,.N],'Brokers'=dt[,.N,by=Broker][,.N],'Observations'=prettyNum(dt[,.N],big.mark=' '))))
+# }
+# 
+# summary.mean.stat <- function(dt,value){
+#   rbind(setnames(cbind(dt[,.N,by=list(year,Stock)][,descriptive.f(N),by=year][V1==value][,c(1,3),with=F],dt[,.N,by=list(year,Broker)][,descriptive.f(N),by=year][V1==value][,3,with=F],dt[,.N,by=list(year,Stock,Broker)][,descriptive.f(N),by=year][V1==value][,3,with=F]),c('Years','Firms','Brokers','Observations')),setnames(data.table(cbind(Years='All years','Firms'=dt[,.N,by=Stock][,descriptive.f(N)][V1==value][,2,with=F],'Brokers'=dt[,.N,by=Broker][,descriptive.f(N)][V1==value][,2,with=F],'Observations'=dt[,.N,by=list(Stock,Broker)][,descriptive.f(N)][V1==value][,2,with=F])),c('Years','Firms','Brokers','Observations')))
+# }
+
+
+
+load('~/Dropbox/workspace/Projects/EPS/cache/complete.dt.RData')
+load('~/Dropbox/workspace/Projects/EPS/cache/eps.dt.RData')
+# crossby = function(DT, j, by) {
+#     j = substitute(j)
+#     ans = rbind(
+#         DT[,eval(j),by],
+#         DT[,list("Total",eval(j)),by=by[1]],
+#         cbind("Total",DT[,eval(j),by=by[2]]),
+#         list("Total","Total",DT[,eval(j)]),
+#         use.names=FALSE
+#         # 'use.names' argument added in data.table v1.8.0
+#     )
+#     setkeyv(ans,by)
+#     ans
+# }
+# crossby(eps.dt,length(Stock),c('Sector'))
+
+eps.stocks <- intersect(eps.dt$Stock,dimnames(array.all.vvs)[[2]])
+eps.dt <- na.omit(setkey(eps.dt[,core.b:=.N>=12,by=list(Stock,Broker)][(core.b)][,clean.s:=.N>=3,by=list(q.id,Stock)][(clean.s)][,q.num:=.GRP,by=q.id],Stock)[eps.stocks])
+#complete.dt <- rbindlist(lapply(43:85,function(q){ complete.dt[q.id==q]}))
+eps.stocks.rank <- intersect(complete.dt$Stock,dimnames(array.all.vvs)[[2]])
+
+complete.dt <- setnames(na.omit(setkey(complete.dt,Stock)[eps.stocks.rank][,eps.pmafe:=abs(Est-act.eps)/mean(abs(Est-act.eps))])[,q.id:=NULL],'fis.q','q.id')
+
+ind.v <- setnames(data.table(reshape2::melt(array.all.vvs[,eps.stocks,])),c('Quarter','Stock','Var','value'))
+
+desc.ind <- acast(setnames(ind.v[,descriptive.f(value,basic=T),by=.(Var)],c('Var','Stat','value')),Var~Stat,value.var = 'value')
+
+stat.eps <- rbind(setnames(eps.dt[order(Sector),c(lapply(.SD,function(i){length(unique(i))}),.N),by=.(Sector),.SDcols=c('Stock','Broker')],4,'Forecast'),setnames(cbind('Total',eps.dt[order(Sector),c(lapply(.SD,function(i){length(unique(i))}),Forecast=.N),.SDcols=c('Stock','Broker')]),1,'Sector'))
+
+###per broker perspectives
+# crossby = function(DT, j, by) {
+#     j = substitute(j)
+#     ans = rbind(
+#         DT[,eval(j),by],
+#         DT[,list("Total",eval(j)),by=by[1]],
+#         cbind("Total",DT[,eval(j),by=by[2]]),
+#         list("Total","Total",DT[,eval(j)]),
+#         use.names=FALSE
+#         # 'use.names' argument added in data.table v1.8.0
+#     )
+#     setkeyv(ans,by)
+#     ans
+# }
+
+num.f.dt <- eps.dt[order(Sector),.N,by=.(q.id,Sector,Broker,Stock)]
+
+per.broker <- setnames(cbind(
+        rbind(eps.dt[order(Sector),.N,by=.(q.id,Sector,Broker)][,mean(N),by=Sector],list('Total',eps.dt[order(Sector),.N,by=.(q.id,Sector,Broker)][,mean(N)])),
+        rbind(num.f.dt[,.N,by=.(q.id,Sector,Broker)][,mean(N),by=.(Sector)],list('Total',num.f.dt[,.N,by=.(q.id,Sector,Broker)][,mean(N)]))[,V1],
+        rbind(num.f.dt[,mean(N),by=.(Sector,Stock,Broker)][,mean(V1),by=.(Sector,Broker)][,mean(V1),by=Sector],list('Total',num.f.dt[,mean(N),by=.(Sector,Stock,Broker)][,mean(V1),by=.(Sector,Broker)][,mean(V1)]))[,V1],
+        rbind(num.f.dt[,.N,by=.(Sector,Broker,Stock)][,mean(N),by=.(Sector,Broker)][,mean(V1),by=Sector],list('Total',num.f.dt[,.N,by=.(Sector,Broker,Stock)][,mean(N),by=.(Sector,Broker)][,mean(V1)]))[,V1]),c('Sector','Forecast','Stocks','Forecast/stock','Follow time,q'))
+
+###per stock
+per.stock <- setnames(cbind(
+        rbind(eps.dt[order(Sector),.N,by=.(q.id,Sector,Stock)][,mean(N),by=Sector],list('Total',eps.dt[order(Sector),.N,by=.(q.id,Sector,Stock)][,mean(N)])),
+        rbind(num.f.dt[,.N,by=.(q.id,Sector,Stock)][,mean(N),by=.(Sector)],list('Total',num.f.dt[,.N,by=.(q.id,Sector,Stock)][,mean(N)]))[,V1],
+        rbind(num.f.dt[,mean(N),by=.(Sector,Stock,Broker)][,mean(V1),by=.(Sector,Stock)][,mean(V1),by=Sector],list('Total',num.f.dt[,mean(N),by=.(Sector,Stock,Broker)][,mean(V1),by=.(Sector,Stock)][,mean(V1)]))[,V1],
+        rbind(num.f.dt[,.N,by=.(Sector,Broker,Stock)][,mean(N),by=.(Sector,Stock)][,mean(V1),by=Sector],list('Total',num.f.dt[,.N,by=.(Sector,Broker,Stock)][,mean(N),by=.(Sector,Stock)][,mean(V1)]))[,V1]),c('Sector','Forecast','Broker','Forecast/broker','Follow time,q'))
+
+
+
+
+#quarters.eps <- data.table(q.id=complete.dt[order(q.id)][,unique(q.id)])
+n <- 3
+n.b <- 3
+#ranked.eps.dt <- complete.dt[,merge(setkey(quarters.eps,q.id),.SD,all=T,allow.cartesian=T),by=list(Stock,Broker),.SDcols=c('q.id','Stock','Broker','rank')][,NextPeriod:=split.rank(rank,n),by=list(q.id,Stock)][,CurrentPeriod:=NextPeriod[c(NA,1:(.N-1))],by=list(q.id,Stock)]
+#[,NextPeriod:=paste(NextPeriod,'+1',sep='')]
+
+#ranked.eps.dt$CurrentPeriod <- factor(ranked.eps.dt$CurrentPeriod,levels=c('top','middle','bottom','noRank'))
+#ranked.eps.dt$NextPeriod <- factor(ranked.eps.dt$NextPeriod,levels=c('top','middle','bottom','noRank'))
+#cache('ranked.eps.dt')
+load('cache/ranked.eps.dt.RData')
+require(descr)
+#eps.cont.tab <- ranked.eps.dt[,crosstab(CurrentPeriod,NextPeriod,prop.r=T,prop.t=T,prop.c=T,prop.chisq = F,plot=F)]
+eps.cont.tab <- lapply(c(1,4),function(i) {cont.tab.f(ranked.eps.dt,i,n.b)})
+
+
+#brok.full.stat.pt <- acast(setnames(q.data[!is.na(trunk.view),descriptive.f(trunk.view),by=year],c('Year','Statistics','value')),Year~Statistics,value.var='value')
+#pt.full.period <- setnames(q.data[!is.na(trunk.view),descriptive.f(trunk.view)],c('Statistics','value'))
+
+
+@
+
+%<<set-parent, echo=FALSE, cache=FALSE>>=
+%set_parent('~/Dropbox/workspace/Projects/Thesis/thesis.Rnw')
+%@
+
+\chapter{Understanding rankings of financial analysts}
+%\title{Understanding and predicting rankings of financial analysts}
+
+
+%  \author[1,2]{ Artur Aiguzhinov (\href{mailto:artur.aiguzhinov@inescporto.pt}{artur.aiguzhinov@inescporto.pt})}
+%  \author[1]{ Ana Paula Serra (\href{mailto:aserra@fep.up.pt}{aserra@fep.up.pt})}
+%  \author[2,4]{Carlos Soares (\href{mailto:csoares@fe.up.pt}{csoares@fe.up.pt})}
+% 
+% \affil[1]{FEP \& CEF.UP, University of Porto}
+% \affil[2]{INESC TEC}
+% \affil[4]{FEUP, University of Porto}
+% 
+%         
+
+
+%\begin{abstract}
+
+
+%\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+
+The Efficient Market Hypothesis (EHM) \citep{fama1970ecm} suggests that all public information available to investors is incorporated in prices and new information is immediately reflected in valuations. Yet, there are information gathering costs and financial analysts are better than an average investor at processing this information which reflects in issued buy/ sell recommendations. 
+
+These recommendations, like other news about the general economy as about the particular company, influence investors' perception and beliefs. Previous studies show that analyst stock recommendations have investment value. The literature suggests further that foreknowledge of analyst forecast accuracy is valuable \citep{brown2003}. In line with academic research findings, practitioners too pay attention to analyst forecast accuracy rankings. On an annual basis, firms such as The Institutional Investor and StarMine \footnote{http://www.starmine.com} publish analysts ratings according to how well they performed, based partly on past earnings forecast accuracy. 
+
+The importance of these ratings should not be ignored because the attention that the market gives to the recommendations of different analysts is expected to correlate with them. Typically, the performance of analysts is analyzed in terms of their individual characteristics (e.g., experience, background) \citep{clement1999}. The disadvantage of this approach is that the collection of the necessary data is difficult and it is not always reliable. As for practitioners, they rely mostly on past accuracy to predict future accuracy. In this paper we follow an alternative approach. We characterize the general behavior of rankings of analysts using variables that characterize the context (e.g., the company in the period of interest) rather than individual analyst characteristics or past accuracy. The model we propose uses predictor variables to distinguish between more and less accurate analyst/company forecasters in different states of the world. The latter kind of data is easier to obtain (e.g., from Thomson Reuters\footnote{http://thomsonreuters.com/}) and is quite reliable. In summary, our goal is not to understand  relative performance of the analysts  in terms of their characteristics but rather in terms of the characteristics of the context in which the analysts operate.
+
+
+We address the problem as a label ranking task, which recently has been receiving an increasing attention in the Machine Learning and Data Mining literature (e.g. \citep{hullermeier,cheng2009}). In label ranking problems,  the goal is to predict an ordering of a finite set of labels \citep{vembu2009}. In our case, the labels are the analysts and the rankings reflect their relative forecasting accuracy.  We choose to use a simple algorithm, naive Bayes for ranking \citep{aiguzhinov2010}. 
+
+The paper is organized as follows: section \ref{sec:ranking} provides the motivation for ranking the analysts; section \ref{sec:labelranking} sets up the label ranking problem and introduces the algorithms for label ranking; section \ref{sec:data} describes the datasets used for the experiments, while section \ref{sec:results} presents and discusses the results; finally, section \ref{sec:conclusion} concludes this paper.
+
+
+\section{Ranking the analysts}
+\label{sec:ranking}
+
+In the finance literature there has been a long debate over the possibilities that financial analysts produce valuable financial advises. Some argue that following the advises of financial analysts projected as recommendations of buy, hold, or selling a particular stock, does not yield an abnormal return. This is consistent with EMH that states financial markets are informational efficient implying that it is not possible to implement a successful trading strategy based upon analyst stock recommendations given that the underlying information would be already reflected in the current stock prices.
+
+The study of \cite{grossman1980iie} argues that, indeed, the point of \cite{fama1970ecm} holds and that it is likely that the markets are efficient; however, there are  information costs and the reflection of the information in the current stock prices is  not immediate as theory suggests. Due to these costs, prices cannot perfectly reflect the information which is available, since if they did, those who spent resources to obtain it would receive no compensation. Later, \cite{fama1991ecm} supports this argument.
+
+The possibility of obtaining abnormal returns spilled out to uncountable different trading strategies over the last 50 years based upon anomalies or deviations to market efficiency. Almost all these trading strategies have one goal in common: predict future returns relying on historical prices or company characteristics. Not only there is a lot of controversy on predictability results but also many of the proposed strategies are rather difficult to implement by an average investor. The obvious alternative is to follow the recommendations of the professionals in the field, such as stock analysts or asset managers. We assume that following the best analysts is the best choice for an investor
+
+The question of whether stock analyst recommendations bring value to investors has been around since the mid-90s. \cite{womack1996} acknowledged that there is a positive benefit for investors from following recommendations of the analysts.
+More recently, \cite{jegadeesh2004} suggest that only the subset of favorable recommendations has predictive power of future market returns and that the level of analyst recommendations (buy/sell) derives part of its predictive power to the fact that analysts select stocks with particular characteristics that are associated with higher returns.
+
+
+Assuming that stock analyst recommendations, on average, do create value to investors \citep{womack1996,barber2001}, it is possible to create rankings of the analysts based on their forecasting accuracy or predictive power of future returns. In fact, StarMine\textsuperscript{\textregistered}
+does exactly this: it ranks analysts on an annual basis and publishes the rankings worldwide. 
+StarMine ratings serve to the benefits of the analysts in the areas of personal reputation, prestige, and compensation. These ratings may also affect how markets react to recommendations and a top-ranked analyst publishes a research report it is expected to have a greater effect than one who is ranked lower. 
+
+The StarMine ranking methodology is based on the analysts performance. This performance is measured by comparing the non-leveraged portfolio for each analysts based on his/her recommendations. The portfolio is constructed as follows. For each ``Buy'' recommendation, the portfolio is one unit long the stock and simultaneously one unit short the benchmark \footnote{Comparable index}. ``Strong buy'' gets a larger investment of two units long the stock and two units short the benchmark. ``Holds'' invest one unit in the benchmark (i.e., for an excess return of zero). Sell are the reverse. StarMine re-balances its calculations at the end of each month to adjust for when an analyst changes his or her mind (by adding, dropping or altering a rating) or when a stock enters or exits an industry grouping. 
+
+StarMine also ranks the analysts based on the accuracy of the earnings forecasts. For that, StarMine developed a proprietary metric called Single-stock Estimating Score (SES). It measures the relative accuracy of each analyst's earnings when compared against their peers. 
+The score from this metric ranges from 0 to 100, with 50 representing the average analyst. To get a score higher than 50, the analyst must make estimates that are both significantly different from and more accurate than other analysts' estimates. 
+
+The value of rankings such as StarMine Ratings for investors is arguable given that these are ex-post and a good analyst on one year does not necessarily make equally good recommendations in the following year. However, if one could predict the ranking of analysts ahead of time (even if with some estimation error) then it would be possible to create a successful trading strategy. \cite{brown2003} show that foreknowledge of analyst forecast accuracy is indeed valuable.
+
+Existing approaches to predict the future performance of the analysts are based on analysts' individual characteristics \citep{clement1999} and their past accuracy \citep{brown2001}. In this paper we follow a different approach in which we predict the rankings of the financial analysts based upon state variables.\footnote{The implementation of the predicted results into a trading strategy is out of scope of this paper.}
+
+
+\section{Label ranking}
+\label{sec:labelranking}
+
+Based on \cite{vembu2009}, a label ranking problem is defined as follows. Let $\mathcal{X} \subseteq \{\mathcal{V}_1,\ldots,\mathcal{V}_m\}$ be an instance space of nominal variables, such that $\mathcal{V}_a=\{v_{a,1}, \ldots, v_{a,n_a}\}$ is the domain of nominal variable $a$, containing $n_a$ different values.  Also, let $\mathcal{L} = \{\lambda_1,\ldots,\lambda_k\}$ be a set of labels, and $\mathcal{Y} = \Pi_{\mathcal{L}}$ be the output space of all possible total orders \footnote{A total order is a complete, transitive, and asymmetric relation $\succ$ on $\mathcal{L}$, where $\lambda_i \succ \lambda_j$ indicates that $\lambda_i$ precedes $\lambda_j$. In this paper, given $\mathcal{L}=\{A,B,C\}$, we will use the notation $\{A,C,B\}$ and $\{1,3,2\}$ interchangeably to represent the order $A \succ C \succ B$.}  over $\mathcal{L}$ defined on the permutation space $\Pi$. The goal of a label ranking algorithm is to learn a mapping $h: \mathcal{X} \rightarrow \mathcal{Y}$, where $h$ is chosen from a given hypothesis space $\mathcal{H}$, such that a predefined loss function $\ell: \mathcal{H} \times \mathcal{Y} \times \mathcal{Y} \rightarrow \mathbb{R}$ is minimized. The algorithm learns $h$ from a training set $\mathcal{T}=\{x_i,y_i\}_{i \in \{1, \ldots, n\}} \subseteq \mathcal{X} \times \mathcal{Y}$ of $n$ examples, where $x_i = \{x_{i,1}, x_{i,2}, \ldots, x_{i,m} \} \in \mathcal{X}$ and $ y_i = \{y_{i,1}, y_{i,2}, \dots, y_{i,k}\} \in \Pi_{\mathcal{L}}$. Furthermore, we define $y_i^{-1} = \{y_{i,1}^{-1}, y_{i,2}^{-1}, \ldots, y_{i,k}^{-1}\}$ as the order of the labels in example $i$. Given that we are focusing on total orders, $y_i^{-1}$ is a permutation of the set $\{1, 2, \ldots, k\}$ where $y_{i,j}^{-1}$ is the rank of label $\lambda_j$ in example $i$.
+
+
+To assess the accuracy of the predicted rankings relative to the corresponding target rankings, a suitable loss function is needed. In this paper we compare two rankings using the Spearman correlation coefficient \cite{brazdil2003,vembu2009}:
+\begin{equation}
+\label{eq00}
+ \rho(\pi,\hat{\pi})=1-\frac{6\sum_{j=1}^k(\pi_j-\hat{\pi}_j)^2}{k^3-k}
+\end{equation}
+where $\pi$ and $\hat{\pi}$ are, respectively, the target, or ``true'', ranking that is known ex-post  and predicted rankings for a given instance.\footnote{ In the following, we will use $y_i$ and $\pi_i$ interchangeably to represent the target ranking.} Figure ~(\ref{fig: timeline}) shows the time line relation between the predicted and the target rankings. We use all information available up to time $t-2$ for training data and for the independent variables. At $t-1$, we generate a new training example given new information available at time $t-1$. We apply label ranking algorithm on this updated training example and generate a ranking model which outputs the predicted rankings for period $t$. At time $t$, we measure accuracy of the predicted rankings $\hat{\pi}$ against the true one $\pi$ by applying equation ~ (\ref{eq00}).
+
+The interpretation of the coefficient values is simple. Two orders with all the labels placed in the same position will have a Spearman correlation of $+1$. Labels placed in reverse order will produce  correlation of $-1$. Thus, the higher the value of $\rho$ the more accurate the prediction is compared to target. The loss function is given by the mean Spearman correlation values (eq. \ref{eq00}) between the predicted and target rankings, across all examples in the dataset:
+
+
+\begin{equation}
+\label{loss}
+ \ell=\frac{\sum_{i=1}^n \rho(\pi_i,\hat{\pi}_i)}{n}
+\end{equation}
+An extensive survey of label ranking algorithms is given in \cite{vembu2009}.
+
+
+Here we address the problem using an adaptation of naive Bayes for label ranking \citep{aiguzhinov2010} (see Appendix). 
+
+The naive Bayes label ranking algorithm relies on the similarity  among rankings. Suppose we have  artificial data for 6 quarters and rankings of 3 brokerage firms  for each of  quarter. Also assume that we identify some independent variables $x_1 \ldots x_4$ that we think are responsible for the rankings in a given quarter. Table \ref{tab01} summarizes the example. 
+
+When looking at rankings, we observe that there are instances with the equal rankings (such as quarters $\{1,3,5\}$ and quarters $\{2,6\}$). Thus, the occurrence of $\{1,2,3\}$ is more frequent (three times) than the occurrence of $\{2,3,1\}$ (twice). Moreover, the fact that the ranking of quarter 4 is similar to the one of quarter 3 intuitively increases the similarity of the latter. For the same reason, the similarity of the ranking of quarter 4, which appears only once, is also increased by the existence of similar rankings in quarters 1, 3 and 5. Based on this reasoning, we assume that the average correlation of a ranking to a set of other rankings is a measure of its similarity and can be used in substitution of the probabilities in naive Bayes for label ranking. A similar logic can be applied in defining the conditional rankings. For example, for variables $x_1$ and its value \textit{High} we have three rankings with the most frequent occurrence of rankings $\{2,3,1\}$. Thus, this ranking has a higher similarity of appearance under condition of $(x_1|High)$. A detailed formalization of the algorithm is provided in the Appendix.
+
+
+
+\section{State variables}
+
+Studies by \cite{clement1999}, \cite{brown2003}, \cite{jegadeesh2004}, all try to analyze  factors that affect the performance of the analysts.  However, most these papers look at the individual characteristics of analysts such as their job experience, their sources of affiliation,  industry specializations. Despite that these variables are reasonable choices in explaining the errors in analysts forecasts, they explain the individual analysts' characteristics. We focus our research on the analysis of the analysts that work in the same informational environment and try to answer the fundamental question: given the consistency in  performance of the  analysts covering the same stock, what analysts should we follow? That is, we want to predict the relative performance of the analysts using only broker-,  firm-, industry-specific and economy-wide variables. 
+ 
+\subsection{Broker-based variables}
+Following \cite{clement1999,clement2003,brown2001}, we select the following broker-specific variables.
+\begin{itemize}
+\item Consensus forecast of brokers;
+\item  Revision of forecasts of brokers;
+\end{itemize}
+Consensus forecast can be a proxy of tendency of analysts to use forecast made by other brokers (herding). Revision of the forecasts can test the level of specialty of the brokers for the given industry/stock. The deviation from the mean revision can serve as a proxy of degree of specialty. 
+
+
+\subsection{Firm-based variables}
+
+In essence, ranking means that there are differences in opinion among the analysts.  This fact implies that there is  a dispersion in the analysts' forecasts for a given stock \citep{diether2002}. Thus, we can analyze  the analysts forecasts' dispersion in terms of its origin and factors that affect it; hence, assuming the same variables affect the rankings.
+The financial literature on analysts dispersion identifies two sources of its origin: uncertainty about the future of a firm  and information asymmetry between the managers of a firm and the investors \citep{barron1998,barron2009}. We propose to identify the variables affecting the dispersion of the analysts in line with these two concepts.
+
+\subsubsection{Uncertainty}
+
+\paragraph{Business risk.} Business risk is associated with the uncertainty in operating results, especially, in operating earnings \citep{hill1980}. An increase in business risk entails an increase in ex ante volatility of the reported earnings \citep{parkash1995}. \cite{parkash1995} propose to use two indicators to measure business risk. First, is the standard deviation of the market return on the firm's unlevereged equity. Second, is the variability of the accounting returns before interest and taxes. We think that  book-to-market ratio can serve as a proxy for the business risk measurement. 
+
+\paragraph{Financial risk.} Financial risk is also responsible for the uncertainty in the future earning of a stock. More debt implies more variability in earnings as managers would try to maximize the value of a stock using the debt; thus, having the risk of the default in the future or taking high risk investment projects. 
+
+\cite{parkash1995} suggest to use two indicators of the financial risk. One is the debt-to-equity ratio \emph{DE} and inverse of interest coverage ratio. We select \emph{DE} ratio to as measure of the financial risk.
+
+\paragraph{Size.} The firm size can be used as a proxy for amount of information available for a firm (larger firm - more information). Thus, larger firm has more news coverage which reduces uncertainty. \cite{bhushan1989} argues that an investor is likely to find private information about larger firm more valuable than the same information about smaller firm. 
+
+Size is measured as the market value (MV) of the firm as following:
+\begin{equation}
+\mathrm{MV}= \log(\mathrm{PRICE} \times \mathrm{STOCKS})
+\end{equation}
+where \emph{PRICE}  is the stock price at the end of the quarter and \emph{STOCKS} is the number of stock outstanding. Consistent with the literature, we use log of market value. 
+
+
+\paragraph{Return variability.}
+Return variability influence the uncertainty regarding future earnings \citep{henley2003, diether2002}. An increases in variability of the abnormal returns is positively correlated with the uncertainty about the earnings; thus, affecting the dispersion among the analysts. To calculate the return variability, we use method provided in \cite{sousa2008}, where stock return volatility is decompose into market and stock specific components as follow:
+\begin{eqnarray}
+Var (R_{it})&=&\sigma^2_{mkt}+\sigma^2_{i} \\
+\sigma^2_{mkt}&=&\sum_{s\in t} (R_{ms}-\mu_{m})^2 \nonumber \\ 
+\sigma^2_{i}&=&\sum_{s \in t} (R_{mt}-R_{it})^2 \nonumber
+\end{eqnarray}
+where $R_{ms}$ is the market return over sample period; $\mu_{m}$ is the daily mean of $R_{ms}$; $s$ is the number of trading days in period $t$.
+
+\subsubsection{Information Asymmetry variables}
+
+\paragraph{Accruals.} 
+Accruals, as a part of  earnings, is one of the variables that cause the information asymmetry between managers of a firm and investors. Studies have shown that presence of asymmetry is a necessary condition for the earnings management \citep{trueman1988,richardson2000}. To be more specific, it is the discretionary part of the accruals that causes  the information inefficiency  in the earnings management \citep{richardson2000,ahmed2005}. 
+
+\paragraph{R\&D expenses.}
+Another variable that contributes to the problem of information asymmetry is the R\&D expense. \cite{aboody2000} state that these R\&D activities contribute substantially to the information asymmetry between managers and investors. 
+
+Due to data constrains, we select only Accruals as  the independent variables. We calculated total accruals-to-total assets ratio defined in \cite{creamer2009}:
+
+\begin{eqnarray}
+TA=\frac{\Delta C.As._q - \Delta Cash_q - (\Delta C.Lb._q - \Delta C.Lb.D_q) - \Delta T_q - D\& A_q}{(T.As._q - T.As._{q-4})/2}
+\end{eqnarray}
+where $\Delta X_q=X_q-X_{q-1}$; C.As - current assets; C.Lb - current liabilities; C.Lb.D - debt in current liabilities; T - deferred taxes; D\&A - depreciation and amortization; and T.A - total assets. 
+
+
+
+\subsection{Sector-based variables}
+The industry specific variables that cause the dispersion in the analysts' forecasts are connected  with the uncertainty concept. One of the variables that is suggested to capture is the variability in the industry Producer Price Index (PPI) \citep{henley2003}. 
+
+
+\subsection{Macroeconomics variables}
+We select a set of the macroeconomic variables  to capture the state of the world. The variables are: 
+%As far as the economy-wide variables is concerned, \cite{elton1984} state that these variables contribute least to the errors in analysts forecasts. They report that by decomposing the errors into firm-specific, industry-specific, and economy-wide components, the percent of errors that were related to  economy-wide information was least of all three components of errors. On average, forecasts  errors associated with misinterpreting the economy-wide information were about 2.5\%, industry-specific errors were 25\%, and firm-specific were 70\%.  Nevertheless, I will include some of the variables that are concern with the uncertainty in the economy. 
+\begin{itemize}
+\item Gross National Product (GNP);
+\item Inflation rate;
+\item Interest rate (90-days T-bill rate);
+\item Market variability (CBOE VIX index)
+\end{itemize}
+\cite{lev1993} look at different state of the economy based on  different levels of GNP--inflation combinations. They found that when economy is booming, i.e. high GNP-low inflation state, they observed the significant increase in firms' Capital Expenditures coefficient. This implies that firms start enjoy capital investment due to the low cost of capital. This state of the economy produces less uncertainty. In the medium GNP-high inflation state of the economy  \cite{lev1993} report high R\&D expenditures, which, from the above mentioned analysis, may spur high level of information asymmetry based on the increase R\&D activities. Finally, in the low GNP-high inflation state, they observe the Doubtful Receivables coefficient is the largest implying that at this recession state many firms go bankrupt or default on the loans -- a signal of high uncertainty in the economy. All these states produce the dispersion of the analysts forecasts.
+
+\section{Data and experimental setup}
+\label{sec:data}
+Independent variable data obtained from ThomsonReuters Database and Datastream. The descriptive statistics presented in tabel (\ref{tab:ind.vvs}). 
+
+We constructed rankings of analyst earnings forecast accuracy.\footnote{An alternative proxy to evaluate analyst predictive ability would be the correlation between analyst recommendations and future stock returns. To do so, we would have to assign standardized numerical ratings to recommendations (strong buy, buy, hold, sell, strong sell) in a similar way as it is done by Zacks Investment Research.}
+We selected companies that are publicly traded in either NYSE, NASDAQ, or AMEX. The accounting data was obtained from the Thomson One/Reuters Fundamental database. We also obtained the data from I/B/E/S of all earnings per share forecasts ever made by an analyst\footnote{We use words ``analyst''  even-though the database is for brokerage houses.}  for each company at study. 
+
+We apply a number of requirements for our data. We select stocks with at least one broker has at minimum 12 quarters of experience in covering this stocks. In addition, for the computational purpose, we need at least 3 brokers per stock in each quarter.  We call this set of brokers as ``core" brokers: we believe they are  the ones that have specialty in a particular stock. \cite{stickel1995} finds that recommendation changes of star analysts have a greater impact and \cite{fang2008aso} also confirm that they are profitable. Thus, it seems to be the case that only a subset of analysts (not the consensus) influence prices and, as such, only that subset of brokers deserves to be followed. In total we have 244 unique brokers covering 1775 stocks during 84  quarters from 1Q1989 until 4Q2009. For calculations of market variability we use daily prices of S\&P 500.  
+
+
+Table ~(\ref{table:forecasts-broker}) presents the break down by sector of the forecasts issued per quarter.  Panel A shows averages form the broker perspective. As we observe, on average, for all sectors, in each quarter there were 27 forecast per broker. Each of these brokers would issue 2.75 forecasts per stock and each broker would follow a stock for 11 quarters. Panel B shows same statistics but from the stock perspective.  On average, in each quarter a stock would get 14.66 forecasts from 4.41 brokers. Per quarter, a stock would get 2.6 forecasts per broker and a stock would have a coverage life of 12 quarters. 
+
+Figures (\ref{mean-f}) depict some per quarter dynamics. %We should note that the  small mean values corresponding to the beginning of the sample period may be attributed to the absence of the corresponding data in the I/B/E/S database rather than representing the reality. Further investigation is required to clarify this issue. 
+
+
+
+%The nature of the naive Bayes algorithm requires that the independent variables should be ``converted'' from continuous flow (numerical) into discrete, or symbolic, state.  There are different ways of performing  this discretization \citep{dougherty1995}.  We chose the equal size bins method which is given in \cite{dougherty1995}. The width of the bin is computed as:
+%\begin{equation}
+%\label{eq:bins}
+% \delta=\frac{a_{max}-a_{min}}{k}
+%\end{equation}
+%where $a_{max}$ and $a_{min}$ are maximum and minimum values of the variable $a$ and $k$ is the number of bins. The  value of $\delta$  used to create bins applyingis $a_{min} + \delta i$, where $i=1 \ldots k-1$.  We assign the symbolic values based on the position of the discretization interval relative to $a_{min}$ and $a_{max}$. For example, the interval of $a_{min}+ \delta$ we call ``Low''. We discretized all variables into four bins.
+
+
+
+\subsection{Target  rankings of analysts}
+Prior to address the problem of predicting the rankings of the analysts, it is important to create the target rankings $y_i$, which the approach described here will try to predict. They are the ``true'' rankings in the sense that they are calculated ex-post based on one of the analysts' performance evaluation models \citep{clement1999,brown2001,creamer2009}. In this paper, the target rankings of analysts are based on the Proportional  Mean Absolute Forecast Error (\textit{PMAFE}) that measures the forecast accuracy \citep{brown2001}. If we define the  Forecast Error  (FE) as an absolute value of the difference between I/B/E/S actual quarter earnings of a stock and the latest forecast made by an analyst for that quarter: 
+\begin{equation}
+\mathrm{FE_{q,a,s}}=|\mathrm{ActEPS_{q,s}}-\mathrm{EPS_{q,a,s}}|
+\end{equation}
+where $q$ is a quarter, $a$ and $s$ are the analysts and stocks indexes, then consensus forecast error is given by:
+\begin{equation}
+\mathrm{\overline{FE_{q,s}}}=\frac{1}{n}\sum_{a=1}^n \mathrm{FE_{q,a,s}}
+\end{equation}
+where $n$ is the number of analysts in a given quarter 
+
+PMAFE is given as:\footnote{The rankings that are commonly used by $\mathrm{FE}$ and $\mathrm{PMAFE}$ are the same. The latter is more common in the literature where OLS methods in regression analyses require normalization of the data.}
+\begin{equation}
+\mathrm{PMAFE_{q,a,s}}=1+\frac{\mathrm{FE_{q,a,s}}-\mathrm{\overline{FE_{q,s}}}}{\mathrm{\overline{FE_{q,s}}}}=\frac{\mathrm{FE_{q,a,s}}}{\mathrm{\overline{FE_{q,s}}}}
+\end{equation}
+To rank the analysts based on their PMAFE, we scaled these values by adding 1 so that those analysts who made an absolute match of EPS forecast with actuals values (PMAFE=0) would receive a higher rank. In case the analysts does not issue a forecast in the subsequent quarters, we do not roll over her previous forecasts. 
+
+An analyst that follows one stock, does not necessarily issue forecast every quarter. Therefore, the question is how to evaluate a predicted ranking in this case. For instance, when the ranking \{John, Brown, Smith\} is predicted and then Brown does not make a forecast during the corresponding quarter. In this case, we assume that the investor will simply ignore the forecast. Therefore, when evaluating the accuracy of a predicted ranking, we remove all analysts that have not made EPS forecasts during the corresponding quarter
+
+We perform a simple analysis of the target rankings. Specifically, we compare the composition of top $n$ and last $n$ brokers on quarter-to-quarter basis. Table (\ref{tab:top}) shows the composition of top and bottom rankings at period $t$ 
+compared to top and bottom rankings at period $t-1$.  We find that at period $t$, the top $n$ rankings consists of both: the  brokers that stayed in top $n$ rankings of period $t-1$  and the brokers that were in last $n$ rankings at $t-1$. That is, period $t$ top rankings have, on average, an equal proportion of the brokers that stayed in the top rankings and the ones that moved from the last rankings to top rankings.
+
+The same analysis of the last $n$ rankings reveal somewhat different behavior. We find that period $t$ bottom rankings,  on average, consists mostly from the brokers that were in the last rankings at period $t-1$ and less from the brokers from top ranks at $t-1$. That is, top broker of period $t-1$, on average, do not move to the bottom ranks at period $t$. The outcome of this analysis reveal that there is a strong consistency of the brokers that are in the top ranks. These brokers tend to stay on top from quarter to quarter. The bottom ranks are not as consistent as the top ones as these brokers can move to the top ranks or stay in the last positions. 
+
+
+\section{Experimental setup}
+\label{sec:exp_setup}
+
+
+
+Given that the data are ordered in time, we estimate the accuracy of the methods using a growing window approach. When predicting the ranking for quarter $q$, the training set consists of the data for all quarters $i \in 1 \ldots q-1$. We consider timing in rankings; that is, the algorithm gives more weight to the most recent rankings and less weight to the old ones. 
+
+To test whether our approach is identifying meaningful patterns in the data, we compare it with simple baseline methods. The first baseline method is based on the mean rank of each label over all training examples \citep{brazdil2009}.
+
+\begin{equation}
+\label{default.rank}
+\hat{\pi}^{-1}_{j} = \frac{\sum_{i=1}^n \pi^{-1}_{i,j}}{n}
+\end{equation}
+where $\pi^{-1}_{i,j}$ is the rank of label $\lambda_j$ on dataset $i$. The final ranking is obtained by ordering the mean ranks and assigning them to the labels accordingly. This ranking is usually called the \emph{default ranking}, in parallel to the default class in supervised classification \citep{mitchell1997}.
+
+The second baseline method that we compare our predicted rankings is to simply  take  the rankings from the previous quarter. That it, use rankings from past quarter $\pi_{q-1}$ as prediction of the rankings for  the current quarter $\hat{\pi}_q$:
+
+\begin{equation}
+\label{naive:ranking}
+\hat{\pi}_q=\pi_{q-1}
+\end{equation}
+We call this baseline method the \emph{naive ranking}. The accuracy of the methods is measured using Spearman's rank correlation coefficient (Eq.~\ref{eq00}) as is done for the naive Bayes ranking method.
+
+The independent variables are fed into the predicting algorithm with three different methods of aggregation. As we have mentioned above, we want to capture the state of the world in which the analysts operate. For this reason, it is necessary to take into account the dynamics of independent variables from one time period to another. We call this an aggregation of the independent variables and we propose the following methods:
+\singlespace
+\begin{itemize}
+\item \raw: no dynamics in the state of the  variables, i.e. independent variables used as they are --- $x_t$;
+\item  \diff: first-differencing  of the variables,i.e., $x_{\Delta{t}}=x_t-x_{t-1}$;
+\item  \random: using random part of the time series decomposition of the independent variables for the previous 8 quarters: $x_{\Delta{t}}=T(t)+S(t)+\epsilon (t)$, where $T(t)$- trend, $S(t)$ - seasonal part and $\epsilon (t)$ - the random part of time series; 
+\item  \rollsd: rolling 8 quarters standard deviation of the independent variables;
+\end{itemize}
+\doublespace
+Obviously, each of these methods produce its own predicted rankings; that is why, we will have four sets of evaluation values in addition to the two baselines.
+
+ %We also perform a significance test using Student p-values for pairs of $\rho$ obtained using Eq.(\ref{eq00}). The first pair to test the significance in differences is $(\rho_{NBr}; \rho_{default})$ and second  is  $(\rho_{NBr}; \rho_{naive})$. 
+
+
+
+
+\section{Results}
+\label{sec:results}
+
+%
+
+%\subsection{Predictive ranking accuracy of naive Bayes for  label ranking}
+We start by analyzing the accuracy of the naive Bayes for ranking  $NBLR(t)$ on  the datasets tested here and discuss if it possible to predict the rankings
+
+Applying equation of a loss function (\ref{loss}), the average ranking accuracy of  predicted rankings, measured as a correlation between predicted rankings (\raw{}, \diff{}, \random{}, \rollsd{}, \default{}, \naive{}) and \tr{} rankings,  is reported in Table (\ref{stat:acc}). We observe that, on average, the naive Bayes for label ranking consistently outperforms both of the baselines. This implies that the algorithm is able to identify the pattern in the data that produce the positive outcomes in the prediction. The result also suggests that the \naive{} prediction is not the best guess of the rankings;  moreover,  the state variables are responsible for the relative performance of the brokers. 
+
+The detailed analysis of the table (\ref{stat:acc}) shows that the \rollsd{} method has the highest average accuracy compared to other methods. This means that the dynamics of the state of the world for the previous two year can be responsible for the rankings of the brokers. Table (\ref{stat:acc:time})  and figure (\ref{fig: acc.time}) present the average annual accuracy for each of the methods on the annual basis. We observe the best performance of \rollsd{} method for the all period except for 2009. We suggest that this behavior has to do with the crisis of 2008. The downward trend of the accuracy is attributed to the ``growing window'' approach in treating the historical rankings, i.e., for training the algorithm we use all available rankings since the beginning of the dataset. An alternative will be to use the ``sliding window'' approach where old rankings are discarded from the model based on the specified period of time (window). 
+
+% At this level of aggregation, we  observe that most sectors exhibit a non-negative ranking accuracy.  
+% However, given the fact that the means of two baselines methods are all close to zero,  there is plenty room for improvement by using the machine learning method. Moreover, as shown in figures (\ref{diff-ac}) and (\ref{diff-naive}), which demonstrate the differences in ranking accuracy of the NBr predicted rankings and the rankings calculated using baselines methods, there are cases where NBr was able to outperform the baselines (the circles  that are above $x=0$). This demonstrates that the NBr   is able to find patterns in the context of a company that relate the rankings of financial analysts.
+
+
+%We assess the ranking accuracy of NBr relative to the default and naive rankings.  Table  \ref{table:results-default} demonstrates the summary of the results aggregated by sectors when compared to the default ranking baseline. If we define a \emph{win (loss)} as a stock in which the naive Bayes ranking method obtained higher (lower) ranking accuracy than the baseline then, the wins/loss rate is the ratio of the number of wins/losses to the total number of stock in the sample. We observed  0.40 wins rate for all stocks in the sample. Additionally, we observed that this value ranges from 0.38 to 0.46 in different sectors. This means that the method is able to outperform the default baseline in many stocks in all sectors.
+ 
+
+
+%Table \ref{table:results-naive} presents the summary of the experiments compared to the second baseline which is naive rankings. We observe a decrease in the wins rate (0.37) when compared to the default ranking baseline (0.40). The number of wins with significant correlation values is also decreased dramatically for some of the sectors.  It should be noted that the two methods are not really comparable. The NBr does not take into account time (e.g., by giving more weight to the most recent rankings), unlike the naive baseline, which uses the ranking of the analysts at a given quarter as a prediction for the following quarter. We plan to adapt the NBr to take time into account in the near future.
+
+%In summary, these results show that the method is able to find patterns in the context of a company that relate the ranking of financial analysts on a significant number of stocks. However, it is also true that there is still plenty room for improvement, which is not surprising given that this is a first attempt at this type of approach. We believe that this can be achieved by improving the predictor variables. 
+
+%\subsection{Predictive accuracy of naive Bayes for  label ranking}
+%\subsection{The most discriminative values}
+%
+%Our model relates several state variables to the rankings of analysts. However, not all of them are expected to have the same or similar influence on those rankings. In other words, we expect that some variables explain the rankings better than others. We may say that the most discriminative variables describe the state of the market according to characteristics that affect the relative performance of analysts the most. However, this interpretation should be done carefully, as these patterns do not represent causal relations. It may be the case that they serve merely as proxies to other variables which are the ones that really affect the behavior of analysts.
+%
+%
+%To calculated the discriminative power of the state variable, we start with the matrix of ranking similarity correlation  (see appendix) and find the average of the similarity correlations between each of the discretized bins. In total, we will have 6 averages because we have 4 bins and that produces 6 unique pairs. The intuition behind calculating the averages of  6 combinations is to see how the rankings change while the value of the state variable moves from one discretized bin to another. We, then, weight mean of each pair by the distance between bins. For example, if we have 4 discretized bins and assign letters $a$ through $d$ from the smallest to the largest intervals, the weighting factor  between bins $a$ and $b$ would be one, between $a$ and $c$ would be two, and so forth.  Averaging the averages of 6 weighted combinations will aggregate the discriminative power of the discretized bins to the level of discriminative power of the state variable. 
+%
+%% Table ~\ref{mdv} shows the summary of the sectors with the most discriminative power. We observe that the most discriminative variable for 3 sectors (Energy, IT, and Materials) is the \textit{Change in Consensus}. As this variable serve as control variable, we say that there is a correlation between changes in EPS consensus values and the relative analysts' accuracy in EPS forecast. In fact, this finding goes in line with the significant body of literature studying the behavior of the analysts (e.g. herding \citep{clement1999,welch2000}, social networking among analysts \citep{creamer2009}) where  consensus is one of the independent variable. The Industrial sector identifies  \textit{Accruals} as the most discriminative variable which can affect the accuracy of the earnings forecast and be responsible for variations in rankings of the analysts \citep{sloan1996,bradshaw2001} . 
+
+
+\section{Conclusion}
+\label{sec:conclusion}
+Some institutions, such as StarMine, rank financial analysts based on their accuracy and investment value performance. These rankings are published and are relevant: stocks favored by top-ranked analysts will probably receive more attention from investors. Therefore, there is a growing interest in understanding the relative performance of analysts. Typical approaches are based on individual characteristics of those analysts or past analyst forecasting accuracy. Here, we follow an alternative approach that links the general behavior of rankings of analysts to variables such as consensus statistics and company characteristics.
+
+%The problem is tackled with a label ranking methodology, employing the naive Bayes ranking algorithm. The models obtained achieved better results than the default ranking and the naive ranking baselines on 40\% and 37\% of the stocks, respectively. These successful rates demonstrate that it possible to predict the rankings using the naive Bayes algorithm for label ranking. 
+
+The proposed method of predicting the rankings produced  results that outperformed simple  baselines. In addition, the algorithm identified that deviations of the independent variables are responsible in explaining the rankings of the brokers. The positive results of this study can attribute for the future research in the area of finding the relation between the state of the world and the performance of the brokers as well as  in the area of developing a trading strategy based on the predicted rankings.
+
+
+%\singlespace
+%\bibliographystyle{newapa}
+%\bibliography{/Users/aiguzhinov/Dropbox/Documents/Bibliography/rank}
+%\doublespace
+
+%\appendix
+%\appendixpage
+%
+%\section*{Naive Bayes for label ranking}
+%\label{sec:naivebayes}
+%
+%In classification, each instance $x_i\in\mathcal{X}$ is binded to class $y_i\in\mathcal{L}$. The task of a learner is to create a classifier from the training set $\mathcal{T}$.The classifier takes a new, unlabelled instance and assigns it to a class (label). 
+%
+%The naive Bayes method classifies a new instance $x_i$ by determining the most probable target value, $c_{MAP}(x_i)$\footnote[4]{$MAP$ -- Maximum A Posteriori}, given the attribute values that describe the instance:
+%\begin{equation}
+%\label{eq01} 
+%c_{MAP(x_i)}= \argmax_{\lambda \in \mathcal{L}} P(\lambda|x_{i,1}, x_{i,2}, \ldots, x_{i,m})
+%\end{equation}
+%where $x_{i,j}$ is the value of attribute $j$ for instance $i$.
+%
+%The algorithm is based on the  Bayes theorem that establishes the probability of $A$ given $B$ as:
+%\begin{equation}
+%\label{eq04}
+% P(A|B)=\frac{P(B|A)P(A)}{P(B)}
+%\end{equation}
+%Thus, the Bayes theorem provides a way to calculate the posterior probability of a hypothesis.
+%
+%Using (\ref{eq04}), we can rewrite (\ref{eq01}) as 
+%\begin{align}
+%\label{eq02}
+% c_{MAP(x_i)}= \argmax_{\lambda\in \mathcal{L}} \frac{P(x_{i,1},x_{i,2}, \ldots, x_{i,m}|\lambda)P(\lambda)}{P(x_{i,1},x_{i,2}, \ldots, x_{i,m})} \notag \\
+%=\argmax_{\lambda\in \mathcal{L}} P(x_{i,1},x_{i,2} \ldots x_{i,m}|\lambda)P(\lambda)
+%\end{align}
+%
+%Computing the likelihood $P(x_{i,1}, x_{i,2}, \ldots, x_{i,m}|\lambda)$ is very complex and requires large amounts of data, in order to produce reliable estimates. Therefore, the naive Bayes classifier makes one simple, hence, naive, assumption that the attribute values are conditionally independent from each other. This implies that the probability of observing the conjunction $x_{i,1},x_{i,2},\ldots,x_{i,m}$ is the product of the probabilities for the individual attributes: $ P(x_{i,1},x_{i,2}, \ldots, x_{i,m}|
+%\lambda)=\prod_{j=1}^m P(x_{i,j}|\lambda)$. Substituting this expression into equation (\ref{eq02}), we obtain the naive Bayes classifier:
+%\begin{equation}
+% \label{eq03}
+% c_{nb}(x_i)=\argmax_{\lambda\in \mathcal{L}} P\left(\lambda\right)\prod_{j=1}^m P\left(x_{i,j}|\lambda\right)
+%\end{equation}
+%
+%To adapt NB for ranking we have to adapt the parts of the algorithm that depend on the target variable, namely:
+%\begin{itemize}
+%\item prior probability, $P(y)$
+%\item conditional probability, $P(x|y)$ 
+%\end{itemize}
+%
+%
+%Similarity and probability are different concepts and, in order to adapt NB for label ranking based on the concept of similarity, it is necessary to relate them. A parallel has been established between probabilities and the general Euclidean distance measure \cite{vogt2007}. This work shows that maximizing the likelihood is equivalent to minimizing the distance (i.e., maximizing the similarity) in a Euclidean space.  Although not all assumptions required for that parallel hold when considering distance (or similarity) between rankings, given that the naive Bayes algorithm is known to be robust to violations of its assumptions, we propose a similarity-based adaptation of NB for label ranking.
+%
+%
+%In the following description, we will retain the probabilistic terminology (e.g., prior probability) from the original algorithm, even though it does not apply for similarity functions. However, in the mathematical notation, we will use the subscript $_{LR}$ to distinguish the concepts. Despite the abuse, we believe this makes the algorithm easier to understand.
+%
+%We start by defining $\mathcal{S}$ as a similarity matrix between the target rankings in a training set, i.e. $\mathcal{S}_{n \times n}=\rho(\pi_i,\pi_j)$. The prior probability of a label ranking is given by:
+%\begin{equation}
+%P_{LR}(\pi) = \frac{\sum_{i=1}^{n} \rho(\pi,\pi_i)}{n}
+%\label{eq:prior}
+%\end{equation}
+%
+%We say that the prior probability is the mean of similarity of a given rankings to all the others. We measure similarity  using the Spearman correlation coefficient (\ref{eq00}). Equation \ref{eq:prior} shows the average similarity of one ranking relative to others. The greater the similarity between two particular rankings, the higher is the probability that the next unobserved  ranking will be similar to the known ranking. Take a look a the Table \ref{tab02} with the calculated prior probability for the unique rankings. We also added a column with prior probabilities considering the rankings as one class.
+%
+%
+%As stated above, the ranking $\{A,C,B\}$, due to its  similarity to the other two rankings, achieves a higher probability.  Note that since we measure prior probability of label ranking as a similarity between rankings, it would not add to one as the in case of probability for classification. 
+%
+%The similarity of rankings based on the value $i$ of attribute $a$, ($v_{a,i}$),  or conditional probability of label rankings, is:
+%\begin{equation}
+%P_{LR}(v_{a,i}|\pi)= \frac{\sum_{i: x_{i,a} = v_{a,i}}\rho(\pi, \pi_i)}{\sum_i\rho(\pi,\pi_i)}%|\{i: x_{i,a} = v_{a,i}\}|}
+%\label{eq:cond}
+%\end{equation}
+%
+%
+%Table \ref{tab03} demonstrates the logic behind the conditional probabilities based on similarity. Notice that there are no examples with $x_1=High$ and a target ranking of $\{A,C,B\}$; thus, $P(x_1=High|\{A,C,B\})=0$. However, in the similarity approach, the probability of $\{A,C,B\}$ depends on the probability of similar rankings, yielding $P_{LR}(x_1=High|\{A,C,B\})=0.750$.
+%
+%
+%
+%
+%Applying equation (\ref{eq03}), we get the estimated posterior probability of ranking $\pi$:
+%\begin{align}
+%P_{LR}(\pi|x_i)&=P_{LR}(\pi)\prod_{a=1}^m P_{LR}(x_{i,a}|\pi)=\\ \notag
+%& =\frac{\sum_{j=1}^{n} \rho(\pi,\pi_j)}{n}\left [ \prod_{a=1}^{m} \frac{\sum_{j: x_{j,a} = x_{i,a}}\rho(\pi, \pi_j)}{\sum_i\rho(\pi,\pi_i)}\right ]
+%\end{align}
+%
+%The similarity-based adaptation of naive Bayes for label ranking will output the ranking with the higher $P_{LR}(\pi|x_i)$ value:
+%\begin{align}
+%\hat{\pi}&=\argmax_{\pi \in \Pi_{\mathcal{L}} }P_{LR}(\pi|x_i)= \\ \notag
+%&=\argmax_{\pi \in \Pi_{\mathcal{L}} }P_{LR}(\pi)\prod_{a=1}^m P_{LR}(x_{i,a}|\pi) 
+%\end{align}
+%       
+%\section*{Extensions}
+%\label{nbr-ext}
+%
+%The naive Bayes algorithm for label ranking can be applied on data with the continuous variables. For this purpose, we apply the Gaussian distribution assumption and modify the conditional prior probability of label rankings as follows:
+% 
+%\begin{equation}
+%\label{cont}
+%P_{LR}(x_{i}|y)=\frac{1}{\sqrt{2\pi}\sigma_y}e^\frac{(x_i-\mu_y)^2}{2\sigma_y^2}
+%\end{equation}
+%where $\mu_y$ and $\sigma_y^2$ are weighted  mean and weighted variance and defined as follows:
+%
+%\begin{equation}
+%\label{mu}
+%\mu_y =\frac{\sum_{i=1}^n  \rho(y,y_i) x_i}{\sum_{i=1}^n \rho(y,y_i)}
+%\end{equation} 
+%
+%
+%\begin{equation}
+%\label{sigma}
+%\sigma_y^2=\frac{\sum_{i=1}^n \rho(y,y_i) (x_i-\mu_y)^2}{\sum_{i=1}^n \rho(y,y_i)}
+%\end{equation} 
+%       
+%Timing in rankings
+%
+%In problems where rankings represent variation of labels across time, it is necessary to take the timing effect into account. That is, recent rankings have higher probability of appearing.  To capture this, we apply the weighted prior label ranking probabilities:
+%
+%\begin{equation}
+%P_{LR}(\pi) = \mathbf{w} \frac{\sum_{i=1}^{n} \rho(\pi,\pi_i)}{n}
+%\label{eq:timing}
+%\end{equation}
+%
+%where $\mathbf{w}$ is the vector of weights calculated as:
+%
+%\begin{equation}
+%\mathbf{w}=\alpha ^{\frac{T_{1 \ldots t}}{T}-1}   t \leqq T
+%\end{equation}
+       
+ \begin{table}[hp]
+\centering
+\ra{1.2}
+\small\addtolength{\tabcolsep}{-1pt}
+\caption{Example of analysts rankings based on the observed variables $x_1 \ldots x_4$ }
+ \begin{tabular}{cclllccc}
+\toprule
+Quarters&$x_1$&$x_2$&$x_3$&$x_4$&\multicolumn{3}{c}{Ranks}\\
+\cline{6-8}
+&&&&&Amertech& Brownbro&Cooper\\
+\midrule
+1&High&Low&High&Medium&1& 2& 3\\
+2&High&High&High&Low& 2& 3& 1\\
+3&Medium&Medium&High&Low&1 &2& 3\\
+4&Low&Low&Low&High&1& 3& 2\\
+5&     Medium&        High&    High& Medium& 1 &2& 3\\
+6&     High&       Medium&   High& Low& 2 &3& 1\\
+\bottomrule
+ \end{tabular} 
+\label{tab01}
+\end{table}
+
+\begin{table}[hp]
+\caption{Descriptive statistics of independent variable}
+\ Descriptive statists of state variables used to describe the state of the analyst.
+\begin{center}
+\begin{tabularx}{\linewidth}{r*{5}{Y}}
+\toprule
+ <<desc-ind,echo=F,results='asis'>>=
+data.to.display <- c('nbr.val','mean', 'median','std.dev')
+results.final <- desc.ind[,data.to.display]
+
+options(xtable.comment = FALSE)
+cat("Variable & Observ & Mean & Median & std.dev\\\\\n")
+cat('\\midrule \n')
+#cat(rep('&',ncol(results.final)),'\\\\')
+print(xtable(results.final,display=c('s','d','f','f','f')),only.contents=T,include.colnames=FALSE,hline.after=NULL, format.args=list(big.mark = " ", decimal.mark = "."))
+@
+\bottomrule
+\end{tabularx}
+\end{center}
+\label{tab:ind.vvs}
+\end{table}
+
+
+\begin{table}[hp]
+\caption{Summary of filtered data}
+\ The table presents the filtered data used in building the rakings break down by sectors. The total for Brokers is the total of unique brokers.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{r*{4}{Y}}
+\toprule
+Sector & \# stocks & \# core brokers & \# forecasts \\ 
+\midrule
+<<desc-sector,echo=F,results='asis'>>=
+print(xtable(stat.eps,display=c('s','d','d','d','d'),align=c('r',rep('c',ncol(stat.eps)))),only.contents=T,include.colnames=FALSE,include.rownames=F,hline.after=NULL, format.args=list(big.mark = " ", decimal.mark = "."),add.to.row=list(pos=list(nrow(stat.eps)-1),command=c('\\midrule \n')))
+@
+\bottomrule
+\end{tabularx}
+\label{table:filtered.summary}
+\end{center}
+\end{table}
+
+\begin{table}[hp]
+\caption{Averages of forecasts and stocks from broker and stock perspective}
+\ The table presents the averages per quarter statistics based on the per Broker (Panel A) and per Stock (Panel B) perspective. Namely, the columns show the average number of forecast per quarter per Broker (per Stock), average number of Stocks (Brokers) per quarter, average number of forecasts per Stock (Broker) per quarter, and average number of quarters  a broker follows a stock (a stock being followed by a broker).
+\begin{center}
+%\begin{tabular}{rcccc}
+\begin{tabularx}{\linewidth}{r*{5}{Y}}
+ \toprule
+  Panel A: &\multicolumn{4}{c}{Per broker perspective}\\
+  \cline{2-5}
+ & Forecasts & Stocks & Forecast/stock & follow time, q \\ 
+  \midrule
+<<per-brok,echo=F,results='asis'>>=
+print(xtable(per.broker,display=c('s','d','f','f','f','f'),align=c('r',rep('c',ncol(per.broker)))),only.contents=T,include.colnames=FALSE,include.rownames=F,hline.after=NULL, format.args=list(big.mark = " ", decimal.mark = "."),add.to.row=list(pos=list(nrow(per.broker)-1),command=c('\\midrule \n')))
+@
+\midrule
+\end{tabularx}
+\begin{tabularx}{\linewidth}{r*{5}{Y}}
+  Panel B: &\multicolumn{4}{c}{Per stock perspective}\\
+  \cline{2-5}
+ & Forecasts & Brokers & Forecast/broker & follow time, q \\ 
+ \midrule
+<<per-stock,echo=F,results='asis'>>=
+print(xtable(per.stock,display=c('s','d','f','f','f','f'),align=c('r',rep('c',ncol(per.stock)))),only.contents=T,include.colnames=FALSE,include.rownames=F,hline.after=NULL, format.args=list(big.mark = " ", decimal.mark = "."),add.to.row=list(pos=list(nrow(per.stock)-1),command=c('\\midrule \n')))
+@
+\bottomrule  
+\end{tabularx}
+\label{table:forecasts-broker}
+\end{center}
+\end{table}
+
+<<fig-mean-forecast,echo=FALSE, include=TRUE,results='hide',fig.width=10.7,fig.height=8.3,fig.cap='Average number of forecast per quarter',fig.lp='mean-f'>>=
+ggplot(num.f.dt[,mean(N),by=.(q.id,Sector)],aes(x=as.Date(q.id),y=V1))+geom_line()+facet_wrap(~Sector,ncol=5,scale='free_x')+theme_bw()+geom_smooth(method='loess')+xlab('Years')+ylab('Mean forecast')
+@
+
+<<fig-num-forecast,echo=FALSE, include=TRUE,results='hide',fig.width=10.7,fig.height=8.3,fig.cap='Number of forecasts',fig.lp='num-f'>>=
+
+ggplot(num.f.dt[,.N,by=.(q.id,Sector)],aes(x=as.Date(q.id),y=N))+geom_line()+facet_wrap(~Sector,ncol=5,scale='free_x')+theme_bw()+geom_smooth(method='loess')+xlab('Years')+ylab('Forecasts')
+@
+
+<<fig-stocks-brok,echo=FALSE, include=TRUE,results='hide',fig.width=10.7,fig.height=8.3,fig.cap='Number of stocks per broker per quarter',fig.lp='num-s-b'>>=
+ggplot(num.f.dt[,.N,by=.(q.id,Sector,Broker)][,mean(N),by=.(q.id,Sector)],aes(x=as.Date(q.id),y=V1))+geom_line()+facet_wrap(~Sector,ncol=5,scale='free_x')+theme_bw()+geom_smooth(method='loess')+xlab('Years')+ylab('Forecasts')
+@
+
+<<fig-brok-stocks,echo=FALSE, include=TRUE,results='hide',fig.width=10.7,fig.height=8.3,fig.cap='Number of brokers per stock',fig.lp='num-b-s'>>=
+ggplot(num.f.dt[,.N,by=.(q.id,Sector,Stock)][,mean(N),by=.(q.id,Sector)],aes(x=as.Date(q.id),y=V1))+geom_line()+facet_wrap(~Sector,ncol=5,scale='free_x')+theme_bw()+geom_smooth(method='loess')+xlab('Years')+ylab('Forecasts')
+@
+
+
+\begin{table}[hp]
+\caption{Descriptive analysts' rankings}
+\label{tab:top}
+\ Changes in analysts' \emph{top}, \emph{middle}, \emph{bottom} and \emph{noRank} ranking categories when moving from $t-1$ (rows) to $t$ (columns). Each cell informs a percent of total that compose the ranking category at $t$. Panel A depicts the breakdown of rankings  based on the accuracy in target prices. Panel B shows the rankings that are based on the EPS forecasts.
+%\centering
+%\ra{1.2}
+%\small\addtolength{\tabcolsep}{-2pt}
+%Average topN-lastN changes in analyst's rank per quarter with N=3, i.e. in how many stocks, on average per quarter per analsyts, an analyst moved from top.prev to  top.current, last.prev->top.current, top.prev->last.cur, and last.prev->last.current
+\begin{center}
+\begin{tabularx}{\linewidth}{r*{6}{Y}}
+  \multirow{10}{*}{$t$}&\multicolumn{5}{c}{$t+1$} \\
+&&$top$&$middle$&$bottom$&Sum\\
+<<chp3-desc-rank,echo=F,results='asis'>>=
+tab=1
+tab.r <- round(cbind(eps.cont.tab[[tab]],Total=apply(eps.cont.tab[[tab]],1,sum)),3)*100
+rownames(tab.r) <- c('&$top$','&$middle$','&$bottom$')
+#colnames(tab.r) <- c('$top$','$middle$','$bottom$','Sum')
+print(xtable(tab.r,hline = F,digits=1),only.contents=T,include.colnames=F,include.rownames=T,hline.after=NULL,sanitize.text.function = function(x) x)
+tab=2
+tab.r <- round(cbind(eps.cont.tab[[tab]],Total=apply(eps.cont.tab[[tab]],1,sum)),3)*100
+rownames(tab.r) <- c('&$top$','&$middle$','&$bottom$')
+#colnames(tab.r) <- c('$top$','$middle$','$bottom$','Sum')
+print(xtable(tab.r,hline = F,digits=1),only.contents=T,include.colnames=F,include.rownames=T,hline.after=NULL,add.to.row=list(pos=list(0),command=c('&\\multicolumn{5}{c}{$t+4$}\\\\ \n')),sanitize.text.function = function(x) x)
+@
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{table}
+
+\begin{table}[hp]
+
+\ra{1.2}
+\caption{Ranking accuracy of the naive Bayes ranking method and the two baselines.}
+\label{stat:acc}
+\begin{center}
+\begin{tabular}{rrrrrrrrr}
+  \toprule
+ & Mean & .05 & .10 & .25 & .50 & .75 & .90 & .95 \\ 
+\midrule
+\naive{} & 0.060 & -0.004 & 0.003 & 0.033 & 0.066 & 0.085 & 0.106 & 0.134 \\ 
+  \default{} & 0.037 & -0.026 & -0.007 & 0.019 & 0.040 & 0.055 & 0.074 & 0.095 \\ 
+  \raw{} & 0.434 & 0.151 & 0.227 & 0.308 & 0.437 & 0.578 & 0.674 & 0.728 \\ 
+  \diff{} & 0.308 & 0.045 & 0.113 & 0.208 & 0.298 & 0.417 & 0.530 & 0.591 \\ 
+  \random{} & 0.319 & 0.119 & 0.162 & 0.251 & 0.321 & 0.412 & 0.480 & 0.515 \\ 
+  \rollsd{} & 0.486 & 0.224 & 0.272 & 0.354 & 0.489 & 0.594 & 0.737 & 0.784 \\ 
+   \bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+
+\begin{table}[hp]
+\ra{1.2}
+\caption{Ranking accuracy: average correlation per year}
+\label{stat:acc:time}
+\begin{center}
+\begin{tabular}{rrrrrrr}
+  \toprule
+ Year & \naive{} & \default{} & \raw{} & \diff{} & \random{} & \rollsd{} \\ 
+  \midrule
+1990 & 0.132 & 0.049 & 0.739 & 0.564 & 0.430 & 0.814 \\ 
+  1991 & 0.062 & 0.040 & 0.665 & 0.378 & 0.371 & 0.718 \\ 
+  1992 & 0.048 & 0.075 & 0.677 & 0.345 & 0.367 & 0.695 \\ 
+  1993 & 0.020 & -0.002 & 0.620 & 0.482 & 0.267 & 0.702 \\ 
+  1994 & 0.047 & 0.015 & 0.503 & 0.492 & 0.405 & 0.579 \\ 
+  1995 & 0.061 & 0.041 & 0.489 & 0.332 & 0.413 & 0.548 \\ 
+  1996 & 0.028 & 0.014 & 0.425 & 0.390 & 0.276 & 0.504 \\ 
+  1997 & 0.074 & 0.050 & 0.497 & 0.292 & 0.441 & 0.539 \\ 
+  1998 & 0.043 & 0.039 & 0.446 & 0.262 & 0.263 & 0.519 \\ 
+  1999 & 0.086 & 0.055 & 0.464 & 0.284 & 0.352 & 0.459 \\ 
+  2000 & 0.077 & 0.035 & 0.324 & 0.314 & 0.369 & 0.340 \\ 
+  2001 & 0.059 & 0.024 & 0.388 & 0.330 & 0.352 & 0.401 \\ 
+  2002 & 0.097 & 0.052 & 0.405 & 0.353 & 0.282 & 0.421 \\ 
+  2003 & 0.066 & 0.038 & 0.468 & 0.264 & 0.141 & 0.486 \\ 
+  2004 & 0.063 & 0.033 & 0.363 & 0.191 & 0.217 & 0.401 \\ 
+  2005 & 0.065 & 0.045 & 0.345 & 0.231 & 0.241 & 0.404 \\ 
+  2006 & 0.055 & 0.042 & 0.378 & 0.201 & 0.331 & 0.429 \\ 
+  2007 & 0.054 & 0.032 & 0.167 & 0.152 & 0.199 & 0.283 \\ 
+  2008 & 0.037 & 0.024 & 0.191 & 0.136 & 0.205 & 0.269 \\ 
+  2009 & 0.044 & 0.032 & 0.150 & 0.178 & 0.315 & 0.117 \\ 
+   \bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{figure}[hp]
+\includegraphics[width=\linewidth]{figure/timeline-bw}
+ \caption{Timeline of ranking prediction} 
+\label{fig: timeline} 
+\end{figure}
+
+
+
+%\end{document}
+

@@ -1,0 +1,11 @@
+data_loading: FALSE
+cache_loading: TRUE
+recursive_loading: FALSE
+munging: FALSE
+logging: FALSE
+load_libraries: TRUE
+libraries: scales,reshape2, zoo,plyr, ggplot2, stringr, parallel,lubridate, abind,data.table,xts
+as_factors: TRUE
+data_tables: FALSE
+version: 0.6
+attach_internal_libraries: TRUE
