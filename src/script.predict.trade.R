@@ -14,7 +14,7 @@ baselines <- c('true','naive','default');methods<-c('raw','1diff','random','roll
 #system.time(source('munge/getting.data.R'))
 
 
-system.time(source('~/Dropbox/workspace/Projects/Black-Litterman/BL-strategies/munge/01-data.q.ret.R'))
+system.time(source('~/Dropbox/workspace/Projects/BL-strategies/munge/01-data.q.ret.R'))
 
 ### Predicting ~ 2400 sec
 system.time(source('src/predicting.R'))
