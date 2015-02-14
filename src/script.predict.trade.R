@@ -8,7 +8,7 @@ baselines <- c('true','naive','default');methods<-c('raw','1diff','random','roll
 #source('~/Dropbox/workspace/Projects/Nbr/lib/mdlp.rank.R')
 
 ### State var. data: ~118 sec
-#system.time(source('~/Dropbox/workspace/Projects/Black-Litterman/BL-strategies/munge/02-state-variables.R'))
+#system.time(source('~/Dropbox/workspace/Projects/BL-strategies/munge/02-state-variables.R'))
 
 ### ~ 407 sec
 #system.time(source('munge/getting.data.R'))
