@@ -55,12 +55,15 @@ evaluation.simple <- function(tr, pr, method = "spearman", use = "p") {
 }
 
 ### Function wrap model and predictions-----
-nbr.generic <- function(rank.data, data, test.data, weights) {
-        correlations <- rescale(cor(t(rank.data), use = "p"),from=c(-1,1))
-        model <- lr.model(correlations, data, weights)
+# nbr.generic <- function(rank.data, data, test.data, weights) {
+#         correlations <- rescale(cor(t(rank.data), use = "p"),from=c(-1,1))
+#         model <- lr.model(correlations, data, weights)
+#         pred.cont(rank.data, model, as.numeric(test.data))
+# }
+nbr.generic <- function(corr,data, test.data, weights,rank.data) {
+        model <- lr.model(corr, data, weights)
         pred.cont(rank.data, model, as.numeric(test.data))
 }
-
 
 #### Discriminative Power functions: NB model only + discrim.
 #### power-----
