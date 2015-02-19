@@ -13,7 +13,7 @@ stocks <- sort(intersect(intersect(dimnames(eps.tr)[[3]],dimnames(array.all.vvs)
 stock.vvs <- vvs.combine(stocks,broker.vvs,array.all.vvs,t=dim(eps.tr)[1])
 
 vvs.names <- dimnames(stock.vvs)[[3]]
-cach('vvs.names')
+cache('vvs.names')
 #system.time(baseline.rankings <- baseline.rankings.f(eps.tr[,,stocks],4))
 #dimnames(baseline.rankings)[[1]] <- dimnames(eps.tr)[[1]]
 #pred.r<- predict.ranking.script.f(methods,stocks,stock.vvs,eps.tr[,,stocks],rank.parameters)
