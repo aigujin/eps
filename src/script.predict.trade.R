@@ -4,7 +4,7 @@ setwd('~/Dropbox/workspace/Projects/EPS/')
 library(ProjectTemplate)
 load.project()
 #require(labelRank)
-baselines <- c('true','naive','default');methods<-c('raw','diff','random','roll.sd');delta<-1L;rank.parameters <- c(n=100L,diff.lag=1L,sd.lag=8L,roll.p=4L)
+baselines <- c('true','naive','default');methods<-c('raw','diff','random','roll.sd');delta<-1L;rank.parameters <- c(n=100L,diff.lag=1L,sd.lag=8L,roll.p=15L)
 #source('~/Dropbox/workspace/Projects/Nbr/lib/mdlp.rank.R')
 
 ### State var. data: ~118 sec
