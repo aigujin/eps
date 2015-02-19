@@ -1,5 +1,5 @@
 ## this is predicting script
-
+print(sel.vvs)
 
 core.dt <- complete.dt[,true:=rank][,.(q.id,Stock,Broker,true)]
 
@@ -12,7 +12,8 @@ stocks <- sort(intersect(intersect(dimnames(eps.tr)[[3]],dimnames(array.all.vvs)
 
 stock.vvs <- vvs.combine(stocks,broker.vvs,array.all.vvs,t=dim(eps.tr)[1])
 
-
+vvs.names <- dimnames(stock.vvs)[[3]]
+cach('vvs.names')
 #system.time(baseline.rankings <- baseline.rankings.f(eps.tr[,,stocks],4))
 #dimnames(baseline.rankings)[[1]] <- dimnames(eps.tr)[[1]]
 #pred.r<- predict.ranking.script.f(methods,stocks,stock.vvs,eps.tr[,,stocks],rank.parameters)
@@ -38,7 +39,7 @@ stock.vvs <- vvs.combine(stocks,broker.vvs,array.all.vvs,t=dim(eps.tr)[1])
 ###rolling experiments
 
 roll.baselines <- roll.baselines.f(eps.tr[,,stocks],rank.parameters[[4]])
-system.time(pred.r <- roll.ranking.f(methods,stocks,stock.vvs,eps.tr[,,stocks],rank.parameters))
+system.time(pred.r <- roll.ranking.f(methods,stocks,stock.vvs[,,sel.vvs],eps.tr[,,stocks],rank.parameters))
 
 all.rankings <- abind(aperm(roll.baselines,c(4,1,2,3)),aperm(pred.r,c(2,1,4,3)),along=4)
 dimnames(all.rankings)[[4]] <- c(baselines,methods)
