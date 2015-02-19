@@ -266,7 +266,8 @@ roll.analyst.prediction.f <- function(rank,features,n,x){
         sapply(1:nrow(train.t),function(t){
                 train <- rev(train.t[t,])
                 weights <- n^((1:length(train))/length(train) - 1)
-                predict.rank <- nbr.generic(rank[train,drop=F,],features[train,drop=F,],features[pred.t[t],drop=F,],weights)
+                corr <- rescale(cor(t(rank[train,drop=F,]), use = "p"),from=c(-1,1))
+                predict.rank <- nbr.generic(corr,features[train,drop=F,],features[pred.t[t],drop=F,],weights,rank[train,drop=F,])
                 if (length(predict.rank) == 0) {
                         rep(NA, length(rank[pred.t[t], ]))
                 } else {
